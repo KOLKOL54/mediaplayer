@@ -4,77 +4,14 @@
 	<meta charset="UTF-8">
 	<title>K-Net MP</title>
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-:root {
-	--background-color: hsl(0, 0%, 12%);
-	--lighter1-color: hsl(0, 0%, 20%);
-	--darker1-color: hsl(0, 0%, 10%);
-	--separator-color: hsl(0, 0%, 14%);
-}
-* {
-	box-sizing: border-box;
-}
-body {
-	padding: 0;
-	border: 0;
-	margin: 0;
-	color: white;
-	font-family: Arial, sans-serif;
-}
-#fileList li {
-	cursor: pointer;
-	margin: 5px 0;
-	color: #007bff;
-}
-#fileList li:hover {
-	text-decoration: underline;
-}
-</style>
+	<link rel="stylesheet" href="styles.css">
 </head>
 <body>
 	<h1>Video Player</h1>
 	<button id="selectFiles">Select files</button>
 	<ul id="fileList"></ul>
-	<video id="video" width="640" height="360" controls></video>
+	<video id="video" width="640" height="360" controls autoplay></video>
 	<pre id="metadata"></pre>
+	<script src="script.js"></script>
 </body>
-<script>
-const { ipcRenderer } = require('electron');
-
-const selectBtn = document.getElementById('selectFiles');
-const fileListEl = document.getElementById('fileList');
-const videoEl = document.getElementById('video');
-const metadataEl = document.getElementById('metadata');
-
-let currentFiles = [];
-
-selectBtn.addEventListener('click', async () => {
-	currentFiles = await ipcRenderer.invoke('open-files');
-
-	//update file list
-	fileListEl.innerHTML = '';
-	currentFiles.forEach(file => {
-		const li = document.createElement('li');
-		li.textContent = file.name;
-		li.style.cursor = 'pointer';
-		li.addEventListener('click', () => playFile(file));
-		fileListEl.appendChild(li);
-	});
-});
-
-async function playFile(file) {
-	videoEl.src = file.url.replace(/\/+$/, '');
-	videoEl.load();
-	videoEl.play();
-
-	try {
-		const meta = await ipcRenderer.invoke('get-metadata', file.name);
-		metadataEl.textContent = JSON.stringify(meta, null, 2);
-	} catch (err) {
-		metadataEl.textContent = `Error retrieving metadata: ${err.message}`;
-	}
-	
-	
-}
-</script>
 </html>

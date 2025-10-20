@@ -60,73 +60,6 @@ const mimeMap = {
 
 app.whenReady().then(() => {
 	createWindow();
-	
-	protocol.registerStreamProtocol('mem', (request, callback) => {
-		try {
-			const url = new URL(request.url);
-			const fileName = decodeURIComponent(url.pathname.replace(/^\/+/, ''));
-
-			const buffer = fileCache[fileName];
-
-			console.log('[mem:// request]', { fileName, hasBuffer: !!buffer });
-
-			if (!buffer) {
-				callback({ statusCode: 404 });
-				return;
-			}
-
-			const ext = (fileName.split('.').pop() || '').toLowerCase();
-			const mime = mimeMap[ext] || 'application/octet-stream';
-			const total = buffer.length;
-			const rangeHeader = request.headers && (request.headers.range || request.headers.Range);
-
-			if (rangeHeader) {
-				const matches = /bytes=(\d*)/.exec(rangeHeader);
-				let start = matches && matches[1] ? parseInt(matches[1], 10) : 0;
-				let end = matches && matches[2] ? parseInt(matches[2], 10) : total - 1;
-
-				if (isNaN(start)) start = 0;
-				if (isNaN(end) || end >= total) end = total - 1;
-				if (start > end) start = end;
-
-				const chunk = buffer.slice(start, end + 1);
-				const stream = new PassThrough();
-				stream.end(chunk);
-
-				const headers = {
-					'Content-Type': mime,
-					'Content-Length': chunk.length,
-					'Accept-Ranges': 'bytes',
-					'Content-Range': `bytes ${start}-${end}/${total}`,
-				};
-
-				callback({
-					statusCode: 206,
-					headers,
-					data:  stream
-				}); 
-			} else {
-				const stream = new PassThrough();
-				stream.end(buffer);
-
-				const headers = {
-					'Content-Type': mime,
-					'Content-Length': total,
-					'Accept-Ranges': 'bytes',				
-				};
-
-				callback({
-					statusCode: 200,
-					headers,
-					data: stream
-				});
-			}
-			
-		} catch (err) {
-			console.error('mem protocol error', err);
-			callback({ statusCode: 500 });
-		}
-	});
 });
 
 ipcMain.handle('open-files', async () => {
@@ -151,10 +84,7 @@ ipcMain.handle('open-files', async () => {
 		try {
 			const buffer = fs.readFileSync(filePath);
 
-			// Store in RAM cache using the exact fileName
 			fileCache[fileName] = buffer;
-
-			// Add file info for renderer
 			files.push({
 				name: fileName, // exact key for cache and metadata requests
 				url: `mem://memhost/${encodeURIComponent(fileName)}`
@@ -166,8 +96,6 @@ ipcMain.handle('open-files', async () => {
 
 	return files;
 });
-
-
 
 // Return metadata from in-memory buffer using ffmpeg
 ipcMain.handle('get-metadata', async (event, fileName) => {
@@ -182,6 +110,12 @@ ipcMain.handle('get-metadata', async (event, fileName) => {
 			else resolve(data.format);
 		});
 	});
+});
+
+ipcMain.handle('get-file-buffer', (event, fileName) => {
+	const buffer = fileCache[fileName];
+	if (!buffer) throw new Error('File not found in cache');
+	return buffer;
 });
 
 app.on('window-all-closed', () => {
