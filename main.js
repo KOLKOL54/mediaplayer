@@ -1,11 +1,3 @@
-/*import electron from 'electron';
-import path from 'path';
-import ffmpeg from 'fluent-ffmpeg';
-import ffmpegPath from 'ffmpeg-static';
-import ffprobePath from 'ffprobe-static';
-
-const { app, BrowserWindow, ipcMain, dialog, protocol } = electron; // <-- FIX*/
-
 const { app, BrowserWindow, ipcMain, dialog, protocol } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -13,7 +5,7 @@ const ffmpeg = require('fluent-ffmpeg');
 const ffmpegPath = require('ffmpeg-static');
 const ffprobePath = require('ffprobe-static');
 const { PassThrough } = require('stream');
-const { buffer } = require('stream/consumers');
+//const { buffer } = require('stream/consumers'); not needed for now
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 ffmpeg.setFfprobePath(ffprobePath.path);
@@ -62,7 +54,7 @@ app.whenReady().then(() => {
 	createWindow();
 });
 
-ipcMain.handle('open-files', async () => {
+ipcMain.handle('open-files', async (event) => {
 	const result = await dialog.showOpenDialog(win, {
 		title: 'Select files',
 		properties: ['openFile', 'multiSelections'],
@@ -76,22 +68,17 @@ ipcMain.handle('open-files', async () => {
 	if (result.canceled || result.filePaths.length === 0) return [];
 
 	const files = [];
+	const totalFiles = result.filePaths.length;
 
-	for (const filePath of result.filePaths) {
+	for (let i = 0; i < totalFiles; i++){
+		const filePath = result.filePaths[i];
 		const fileName = path.basename(filePath);
-		//fileCache[fileName] = buffer; //maybe trash
+		await loadFileToCache(filePath, (fileName, progress) => {
+			event.sender.send('file-load-progress', { fileName, progress });
+		});
+		files.push({ name: fileName });
 
-		try {
-			const buffer = fs.readFileSync(filePath);
-
-			fileCache[fileName] = buffer;
-			files.push({
-				name: fileName, // exact key for cache and metadata requests
-				url: `mem://memhost/${encodeURIComponent(fileName)}`
-			});
-		} catch (err) {
-			console.error(`Failed to read file ${filePath}:`, err);
-		}
+		event.sender.send('file-loaded', { fileName, fileIndex: i + 1, totalFiles });
 	}
 
 	return files;
@@ -117,6 +104,33 @@ ipcMain.handle('get-file-buffer', (event, fileName) => {
 	if (!buffer) throw new Error('File not found in cache');
 	return buffer;
 });
+
+function loadFileToCache(filePath, onProgress) {
+	return new Promise((resolve, reject) => {
+		const fileName = path.basename(filePath);
+		const stats = fs.statSync(filePath);
+		const totalSize = stats.size;
+
+		let loaded = 0;
+		const chunks = [];
+
+		const stream = fs.createReadStream(filePath);
+
+		stream.on('data', (chunk) => {
+			chunks.push(chunk);
+			loaded += chunk.length;
+			if (onProgress) onProgress(fileName, loaded / totalSize); // 0–1
+		});
+
+		stream.on('end', () => {
+			const buffer = Buffer.concat(chunks);
+			fileCache[fileName] = buffer;
+			resolve({ fileName, buffer });
+		});
+
+		stream.on('error', (err) => reject(err));
+	});
+}
 
 app.on('window-all-closed', () => {
 	if (process.platform !== 'darwin') app.quit();

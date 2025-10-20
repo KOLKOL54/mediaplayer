@@ -22,3 +22,6 @@ body {
 #fileList li:hover {
 	text-decoration: underline;
 }
+#batchStatus {
+	color: black;
+}
