@@ -5,7 +5,12 @@ const ffmpeg = require('fluent-ffmpeg');
 const ffmpegPath = require('ffmpeg-static');
 const ffprobePath = require('ffprobe-static');
 const { PassThrough } = require('stream');
+const { autoUpdater } = require('electron-updater');
+const log = require('electron-log');
 //const { buffer } = require('stream/consumers'); not needed for now
+
+autoUpdater.logger = log;
+autoUpdater.autoDownload = true;
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 ffmpeg.setFfprobePath(ffprobePath.path);
@@ -34,6 +39,9 @@ function createWindow() {
 	});
 
 	win.loadFile('index.html');
+	win.webContents.once('did-finish-load', () => {
+		autoUpdater.checkForUpdatesAndNotify();
+	})
 }
 
 const mimeMap = {
@@ -51,6 +59,7 @@ const mimeMap = {
 };
 
 app.whenReady().then(() => {
+	log.transports.file.resolvePath = () => path.join(app.getPath('userData'), 'updater.log');
 	createWindow();
 });
 
@@ -131,6 +140,11 @@ function loadFileToCache(filePath, onProgress) {
 		stream.on('error', (err) => reject(err));
 	});
 }
+
+autoUpdater.on('update-downloaded', () => {
+  log.info('Update downloaded — installing now...');
+  autoUpdater.quitAndInstall();
+});
 
 app.on('window-all-closed', () => {
 	if (process.platform !== 'darwin') app.quit();
