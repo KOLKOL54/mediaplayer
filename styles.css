@@ -2,6 +2,8 @@
 	--background-color: hsl(0, 0%, 12%);
 	--lighter1-color: hsl(0, 0%, 20%);
 	--darker1-color: hsl(0, 0%, 10%);
+	--darker2-color: hsl(0, 0%, 8%);
+	--darker3-color: hsl(0, 0%, 6%);
 	--separator-color: hsl(0, 0%, 14%);
 }
 * {
@@ -13,6 +15,24 @@ body {
 	margin: 0;
 	color: white;
 	font-family: Arial, sans-serif;
+	background-color: var(--background-color);
+}
+/* width */
+::-webkit-scrollbar {
+  width: 6px;
+}
+/* Track */
+::-webkit-scrollbar-track {
+  border-radius: 10px;
+}
+/* Handle */
+::-webkit-scrollbar-thumb {
+  background: var(--darker2-color); 
+  border-radius: 10px;
+}
+/* Handle on hover */
+::-webkit-scrollbar-thumb:hover {
+  background: var(--darker3-color); 
 }
 #fileList li {
 	cursor: pointer;
@@ -24,4 +44,78 @@ body {
 }
 #batchStatus {
 	color: black;
+}
+#gallery{
+	/*width:90vw; oldish*/
+	width: 364px;
+	min-width: 200px;
+	max-width: 75vw;
+	/*margin-left: 20px;*/
+	height: 100%;
+	padding: 10px;
+	border: 2px solid var(--lighter1-color);
+	border-radius: 4px;
+	overflow-y: auto;
+	overflow-x: hidden;
+	display: block;
+	resize: horizontal;
+	margin: 10px;
+	flex-shrink: 0;
+}
+#gallery-inner{
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+	gap: 12px;
+	align-items: start;
+	height: max-content;
+	min-height: max-content;
+	grid-auto-rows: auto;
+}
+/* image inside card */
+.file-card img{
+  width:90%;
+  height:80%;
+  object-fit:cover;
+  border-radius:6px;
+}
+
+/* caption */
+.file-card .caption{
+  margin-top:6px;
+  font-size:60%;
+  text-align:center;
+  word-break:break-word;
+  width:100%;
+  padding:0 4px;
+}
+.file-card {
+	background: var(--lighter1-color);
+	color: white;
+	font-size: 24px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 8px;
+	aspect-ratio: 1 / 1;
+	overflow: hidden;
+}
+#file-management {
+	margin-left: 20px;
+	margin-top: 20px;
+}
+#container {
+	display: flex;
+	width: 100%;
+	height: 90vh;
+	/*overflow: hidden; broke it*/ /*useless ish*/
+}
+#video {
+	flex: 1; /*take rest of free space on right*/
+	padding: 10px;
+	width: 100%;
+	height: 100%;
+	background: var(--lighter1-color);
+	display: block;
+	object-fit: contain;
+	margin: 10px;
 }

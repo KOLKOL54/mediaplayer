@@ -5,6 +5,8 @@ const videoEl = document.getElementById('video');
 const metadataEl = document.getElementById('metadata');
 const progressBar = document.getElementById('progressBar');
 const batchStatusEl = document.getElementById('batchStatus');
+const galleryEl = document.getElementById('gallery');
+const inner = document.getElementById('gallery-inner');
 
 let currentFiles = {};
 let currentBlobUrl = null;
@@ -16,14 +18,59 @@ ipcRenderer.on('file-loaded', (event, { fileName, fileIndex, totalFiles }) => {
 	currentBatch.total = totalFiles;
 	batchStatusEl.textContent = `${currentBatch.loaded}/${currentBatch.total} files cached`;
 
-	//add file to file list
-	if (!document.getElementById(`file-${fileName}`)) {
-		const li = document.createElement('li');
-		li.id = `file-${fileName}`;
-		li.textContent = fileName;
-		li.style.cursor = 'pointer';
-		li.addEventListener('click', () => playFile(currentFiles[fileName]));
-		fileListEl.appendChild(li);
+	if (!document.getElementById(`card-${fileName}`)) {
+		const card = document.createElement('div');
+		card.className = "file-card";
+		card.id = `card-${fileName}`;
+		card.style.position = 'relative';
+
+		// create container for square crop
+		const imgContainer = document.createElement('div');
+		imgContainer.style.width = '90%';        // fill the card width
+		imgContainer.style.height = '80%';       // desired height
+		imgContainer.style.position = 'absolute';
+		imgContainer.style.top = '5%';
+		imgContainer.style.overflow = 'hidden';  // crop overflow
+		imgContainer.style.borderRadius = '8px';
+
+		//add image
+		const img = document.createElement('img');
+		//img.src = 'app-icon.png'; replaced
+		img.alt = fileName;
+		img.style.height = '100%';
+		img.style.width = '100%';
+		/*img.style.position = 'absolute';
+		img.style.top = '5%';
+		img.style.borderRadius = '8px';*/
+		img.style.objectFit = 'cover';           // crops to fit the square
+		img.style.objectPosition = 'center';
+
+		// fetch video thumbnail from main process
+		ipcRenderer.invoke('get-video-thumbnail', fileName)
+			.then((base64Thumbnail) => {
+				img.src = base64Thumbnail; // set thumbnail
+		})
+		.catch((err) => {
+			console.error('Error generating thumbnail for', fileName, err);
+			img.src = 'app-icon.png'; // fallback to default icon
+		});
+
+		//show filename
+		const caption = document.createElement('div');
+		caption.textContent = fileName;
+		caption.style.textAlign = 'center';
+		caption.style.marginTop = '4px';
+		caption.style.position = 'absolute';
+		caption.style.bottom = '3%';
+		caption.style.fontSize = '60%';
+
+		imgContainer.appendChild(img)
+		card.appendChild(imgContainer);
+		card.appendChild(caption);
+
+		card.addEventListener('click', () => playFile(currentFiles[fileName]));
+		//galleryEl.appendChild(card);
+		inner.appendChild(card);
 	}
 
 	//hide upload status after done
@@ -40,7 +87,7 @@ selectBtn.addEventListener('click', async () => {
 
 	const newFiles = await ipcRenderer.invoke('open-files');
 	if (!newFiles.length) {
-		batchStatusEl.style.display = 'none';
+		//batchStatusEl.style.display = 'none'; no vanishing status 3/10
 		return;
 	};
 

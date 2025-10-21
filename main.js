@@ -7,6 +7,7 @@ const ffprobePath = require('ffprobe-static');
 const { PassThrough } = require('stream');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
+const os = require('os');
 //const { buffer } = require('stream/consumers'); not needed for now
 
 autoUpdater.logger = log;
@@ -18,6 +19,7 @@ ffmpeg.setFfprobePath(ffprobePath.path);
 let win;
 const fileCache = {};
 app.commandLine.appendSwitch('enable-logging', 'false'); //disable for useless info
+let isLoadingFiles = false;
 
 //const videoFile = path.join(process.cwd(), 'sample.mp4'); //legacy
 protocol.registerSchemesAsPrivileged([
@@ -45,17 +47,17 @@ function createWindow() {
 }
 
 const mimeMap = {
-  mp4: 'video/mp4',
-  mov: 'video/quicktime',
-  webm: 'video/webm',
-  mp3: 'audio/mpeg',
-  wav: 'audio/wav',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  png: 'image/png',
-  gif: 'image/gif',
-  avi: 'video/x-msvideo',
-  mkv: 'video/x-matroska',
+	mp4: 'video/mp4',
+	mov: 'video/quicktime',
+	webm: 'video/webm',
+	mp3: 'audio/mpeg',
+	wav: 'audio/wav',
+	jpg: 'image/jpeg',
+	jpeg: 'image/jpeg',
+	png: 'image/png',
+	gif: 'image/gif',
+	avi: 'video/x-msvideo',
+	mkv: 'video/x-matroska',
 };
 
 app.whenReady().then(() => {
@@ -64,33 +66,48 @@ app.whenReady().then(() => {
 });
 
 ipcMain.handle('open-files', async (event) => {
-	const result = await dialog.showOpenDialog(win, {
-		title: 'Select files',
-		properties: ['openFile', 'multiSelections'],
-		filters: [
-			{ name: 'Videos', extensions: ['mp4', 'mov', 'avi', 'mkv', 'webm'] },
-			{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'webp', 'heic'] },
-			{ name: 'Audio', extensions: ['mp3', 'wav', 'aac', 'flac', 'ogg', 'm4a', 'wma'] }
-		]
-	});
-
-	if (result.canceled || result.filePaths.length === 0) return [];
-
-	const files = [];
-	const totalFiles = result.filePaths.length;
-
-	for (let i = 0; i < totalFiles; i++){
-		const filePath = result.filePaths[i];
-		const fileName = path.basename(filePath);
-		await loadFileToCache(filePath, (fileName, progress) => {
-			event.sender.send('file-load-progress', { fileName, progress });
+	if (isLoadingFiles) {
+		await dialog.showMessageBox(win, {
+			type: 'warning',
+			title: 'Already loading files',
+			message: 'Loding in progress. Wait for it to finnish',
+			buttons: ['OK']
 		});
-		files.push({ name: fileName });
-
-		event.sender.send('file-loaded', { fileName, fileIndex: i + 1, totalFiles });
+		return [];
 	}
 
-	return files;
+	isLoadingFiles = true; //stop user actions
+	try {
+		const result = await dialog.showOpenDialog(win, {
+			title: 'Select files',
+			properties: ['openFile', 'multiSelections'],
+			filters: [
+				{ name: 'Videos', extensions: ['mp4', 'mov', 'avi', 'mkv', 'webm'] },
+				{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'webp', 'heic'] },
+				{ name: 'Audio', extensions: ['mp3', 'wav', 'aac', 'flac', 'ogg', 'm4a', 'wma'] }
+			]
+		});
+
+		if (result.canceled || result.filePaths.length === 0) return [];
+
+		const files = [];
+		const totalFiles = result.filePaths.length;
+
+		for (let i = 0; i < totalFiles; i++){
+			const filePath = result.filePaths[i];
+			const fileName = path.basename(filePath);
+			await loadFileToCache(filePath, (fileName, progress) => {
+				event.sender.send('file-load-progress', { fileName, progress });
+			});
+			files.push({ name: fileName });
+
+			event.sender.send('file-loaded', { fileName, fileIndex: i + 1, totalFiles });
+		}
+
+		return files;
+	} finally {
+		isLoadingFiles = false; //allow new file loads
+	}
 });
 
 // Return metadata from in-memory buffer using ffmpeg
@@ -141,9 +158,38 @@ function loadFileToCache(filePath, onProgress) {
 	});
 }
 
+ipcMain.handle('get-video-thumbnail', async (event, fileName) => {
+	const buffer = fileCache[fileName];
+	if (!buffer) throw new Error('File not cached');
+
+	const tempPath = path.join(os.tmpdir(), `${fileName}.mp4`);
+  	fs.writeFileSync(tempPath, buffer); // save buffer to temp file
+
+	return new Promise((resolve, reject) => {
+		const chunks = [];
+		
+		ffmpeg(tempPath)
+			.setFfmpegPath(ffmpegPath)
+			.seekInput('00:00:01')
+			.frames(1) // only 1 frame
+			.format('mjpeg') // some generic formap maybe jpeg
+			.on('error', (err) => reject(err))
+			.on('end', () => {
+				const thumbnailBuffer = Buffer.concat(chunks);
+				// Convert to base64 string so renderer can use as src
+				const base64 = `data:image/jpeg;base64,${thumbnailBuffer.toString('base64')}`;
+				fs.unlink(tempPath, () => {}); //delete temp file
+				resolve(base64);
+			})
+			.pipe(new PassThrough())
+			.on('data', (chunk) => chunks.push(chunk));
+	});
+});
+
+
 autoUpdater.on('update-downloaded', () => {
-  log.info('Update downloaded — installing now...');
-  autoUpdater.quitAndInstall();
+	log.info('Update downloaded — installing now...');
+	autoUpdater.quitAndInstall();
 });
 
 app.on('window-all-closed', () => {
