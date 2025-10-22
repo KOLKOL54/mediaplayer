@@ -61,35 +61,41 @@ const mimeMap = {
 };
 
 app.whenReady().then(() => {
-	log.transports.file.resolvePath = () => path.join(app.getPath('userData'), 'updater.log');
-	
-	autoUpdater.checkForUpdates();
+	log.transports.file.resolvePathFn = () => path.join(app.getPath('userData'), 'updater.log');
 
-	autoUpdater.on('update-available', (info) => {
-		dialog.showMessageBox({
-			type: 'info',
-			title: 'Update Available',
-			message: 'Update ${info.version} is downloading...',
-			buttons: ['OK']
+	if (app.isPackaged) {
+		// Only check updates when app is packaged
+		autoUpdater.checkForUpdates();
+
+		autoUpdater.on('update-available', (info) => {
+			dialog.showMessageBox({
+				type: 'info',
+				title: 'Update Available',
+				message: `Update ${info.version} is downloading...`,
+				buttons: ['OK']
+			});
 		});
-	});
 
-	autoUpdater.on('update-downloaded', () => {
-		log.info('Update downloaded - installing now...');
-		autoUpdater.quitAndInstall();
-	});
+		autoUpdater.on('update-downloaded', () => {
+			log.info('Update downloaded - installing now...');
+			autoUpdater.quitAndInstall();
+		});
 
-	autoUpdater.on('update-not-available', () => {
-		log.info('No update available. Starting...');
+		autoUpdater.on('update-not-available', () => {
+			log.info('No update available. Starting...');
+			createWindow();
+		});
+
+		autoUpdater.on('error', (err) => {
+			log.error('Update error:', err);
+			createWindow();
+		});
+	} else {
+		// Dev mode: just open window
 		createWindow();
-	});
-
-	autoUpdater.on('error', (err) => {
-		log.error('Update error:', err);
-		createWindow();
-	});
-	//createWindow();
+	}
 });
+
 
 ipcMain.handle('open-files', async (event) => {
 	if (isLoadingFiles) {
