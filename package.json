@@ -33,6 +33,10 @@
 			"!dist",
 			"!node_modules/.cache"
 		],
+		"asarUnpack": [
+			"**/ffmpeg-static/**/*",
+			"**/ffprobe-static/**/*"			
+		],
 		"win": {
 			"icon": "app-icon.png",
 			"target": "nsis",
