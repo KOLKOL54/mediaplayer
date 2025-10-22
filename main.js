@@ -10,13 +10,26 @@ const log = require('electron-log');
 const os = require('os');
 //const { buffer } = require('stream/consumers'); not needed for now
 
+const gotTheLock = app.requestSingleInstanceLock();
+let win;
+
+if (!gotTheLock) {
+	app.quit(); //end if other instance already exists
+} else {
+	app.on('second-instance', () => {
+		if (win) {
+			if (win.isMinimized()) win.restore();
+			win.focus();
+		}
+	});
+}
+
 autoUpdater.logger = log;
 autoUpdater.autoDownload = true;
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 ffmpeg.setFfprobePath(ffprobePath.path);
 
-let win;
 const fileCache = {};
 app.commandLine.appendSwitch('enable-logging', 'false'); //disable for useless info
 let isLoadingFiles = false;
@@ -27,6 +40,8 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 function createWindow() {
+	if (win) return; //stop multiple windows
+
 	win = new BrowserWindow({
 		width: 800,
 		height: 600,
