@@ -62,7 +62,33 @@ const mimeMap = {
 
 app.whenReady().then(() => {
 	log.transports.file.resolvePath = () => path.join(app.getPath('userData'), 'updater.log');
-	createWindow();
+	
+	autoUpdater.checkForUpdates();
+
+	autoUpdater.on('update-available', (info) => {
+		dialog.showMessageBox({
+			type: 'info',
+			title: 'Update Available',
+			message: 'Update ${info.version} is downloading...',
+			buttons: ['OK']
+		});
+	});
+
+	autoUpdater.on('update-downloaded', () => {
+		log.info('Update downloaded - installing now...');
+		autoUpdater.quitAndInstall();
+	});
+
+	autoUpdater.on('update-not-available', () => {
+		log.info('No update available. Starting...');
+		createWindow();
+	});
+
+	autoUpdater.on('error', (err) => {
+		log.error('Update error:', err);
+		createWindow();
+	});
+	//createWindow();
 });
 
 ipcMain.handle('open-files', async (event) => {
