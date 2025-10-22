@@ -2,13 +2,22 @@ const { app, BrowserWindow, ipcMain, dialog, protocol } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const ffmpeg = require('fluent-ffmpeg');
-const ffmpegPath = require('ffmpeg-static');
-const ffprobePath = require('ffprobe-static');
 const { PassThrough } = require('stream');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
 const os = require('os');
 //const { buffer } = require('stream/consumers'); not needed for now
+let ffmpegExec = require('ffmpeg-static');
+let ffprobeExec = require('ffprobe-static').path;
+
+if (app.isPackaged) {
+	const unpackedPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules');
+	ffmpegExec = path.join(unpackedPath, 'ffmpeg-static', process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
+	ffprobeExec = path.join(unpackedPath, 'ffprobe-static', process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe');
+}
+
+ffmpeg.setFfmpegPath(ffmpegExec);
+ffmpeg.setFfprobePath(ffprobeExec);
 
 const gotTheLock = app.requestSingleInstanceLock();
 let win;
@@ -26,9 +35,6 @@ if (!gotTheLock) {
 
 autoUpdater.logger = log;
 autoUpdater.autoDownload = true;
-
-ffmpeg.setFfmpegPath(ffmpegPath);
-ffmpeg.setFfprobePath(ffprobePath.path);
 
 const fileCache = {};
 app.commandLine.appendSwitch('enable-logging', 'false'); //disable for useless info
@@ -117,7 +123,7 @@ ipcMain.handle('open-files', async (event) => {
 		await dialog.showMessageBox(win, {
 			type: 'warning',
 			title: 'Already loading files',
-			message: 'Loding in progress. Wait for it to finnish',
+			message: 'Loading in progress. Wait for it to finnish',
 			buttons: ['OK']
 		});
 		return [];
@@ -216,7 +222,7 @@ ipcMain.handle('get-video-thumbnail', async (event, fileName) => {
 		const chunks = [];
 		
 		ffmpeg(tempPath)
-			.setFfmpegPath(ffmpegPath)
+			.setFfmpegPath(ffmpegExec)
 			.seekInput('00:00:01')
 			.frames(1) // only 1 frame
 			.format('mjpeg') // some generic formap maybe jpeg
@@ -231,12 +237,6 @@ ipcMain.handle('get-video-thumbnail', async (event, fileName) => {
 			.pipe(new PassThrough())
 			.on('data', (chunk) => chunks.push(chunk));
 	});
-});
-
-
-autoUpdater.on('update-downloaded', () => {
-	log.info('Update downloaded — installing now...');
-	autoUpdater.quitAndInstall();
 });
 
 app.on('window-all-closed', () => {
