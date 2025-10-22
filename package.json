@@ -43,8 +43,7 @@
 			"allowToChangeInstallationDirectory": true,
 			"createDesktopShortcut": true,
 			"createStartMenuShortcut": true,
-			"perMachine": true,
-			"allowDowngrades": false
+			"perMachine": true
 		},
 		"publish": [
 			{
