@@ -135,6 +135,7 @@ ipcMain.handle('open-files', async (event) => {
 			title: 'Select files',
 			properties: ['openFile', 'multiSelections'],
 			filters: [
+				{ name: 'Media', extensions: ['mp4', 'mov', 'avi', 'mkv', 'webm', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'webp', 'heic', 'mp3', 'wav', 'aac', 'flac', 'ogg', 'm4a', 'wma']},
 				{ name: 'Videos', extensions: ['mp4', 'mov', 'avi', 'mkv', 'webm'] },
 				{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'webp', 'heic'] },
 				{ name: 'Audio', extensions: ['mp3', 'wav', 'aac', 'flac', 'ogg', 'm4a', 'wma'] }
@@ -211,16 +212,23 @@ function loadFileToCache(filePath, onProgress) {
 	});
 }
 
-ipcMain.handle('get-video-thumbnail', async (event, fileName) => {
+ipcMain.handle('get-media-thumbnail', async (event, fileName) => {
 	const buffer = fileCache[fileName];
 	if (!buffer) throw new Error('File not cached');
 
+	const ext = path.extname(fileName).toLowerCase().slice(1);
+
+	if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'webp', 'heic'].includes(ext)) {
+		const base64 = `data:image/${ext === 'jpg' ? 'jpeg' : ext};base64,${buffer.toString('base64')}`;
+		return base64;
+	}
+
 	const tempPath = path.join(os.tmpdir(), `${fileName}.mp4`);
-  	fs.writeFileSync(tempPath, buffer); // save buffer to temp file
+	fs.writeFileSync(tempPath, buffer);
 
 	return new Promise((resolve, reject) => {
 		const chunks = [];
-		
+
 		ffmpeg(tempPath)
 			.setFfmpegPath(ffmpegExec)
 			.seekInput('00:00:01')
@@ -236,7 +244,7 @@ ipcMain.handle('get-video-thumbnail', async (event, fileName) => {
 			})
 			.pipe(new PassThrough())
 			.on('data', (chunk) => chunks.push(chunk));
-	});
+		});
 });
 
 app.on('window-all-closed', () => {

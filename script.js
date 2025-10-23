@@ -7,6 +7,8 @@ const progressBar = document.getElementById('progressBar');
 const batchStatusEl = document.getElementById('batchStatus');
 const galleryEl = document.getElementById('gallery');
 const inner = document.getElementById('gallery-inner');
+const videEl = document.getElementById('video');
+const imageEl = document.getElementById('image');
 
 let currentFiles = {};
 let currentBlobUrl = null;
@@ -46,7 +48,7 @@ ipcRenderer.on('file-loaded', (event, { fileName, fileIndex, totalFiles }) => {
 		img.style.objectPosition = 'center';
 
 		// fetch video thumbnail from main process
-		ipcRenderer.invoke('get-video-thumbnail', fileName)
+		ipcRenderer.invoke('get-media-thumbnail', fileName)
 			.then((base64Thumbnail) => {
 				img.src = base64Thumbnail; // set thumbnail
 		})
@@ -103,19 +105,41 @@ selectBtn.addEventListener('click', async () => {
 
 async function playFile(file) {
 	try {
+		const ext = file.name.split('.').pop().toLowerCase();
 		const arrayBuffer = await ipcRenderer.invoke('get-file-buffer', file.name);
 
 		if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl); // Revoke previous blob URL
 
+		let mimeType = 'application/octet-stream';
+		if (['mp4', 'mov', 'webm', 'avi', 'mkv'].includes(ext)) mimeType = 'video/mp4';
+		else if (['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'wma'].includes(ext)) mimeType = 'audio/mpeg';
+		else if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'webp', 'heic'].includes(ext)) mimeType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+
 		const blob = new Blob([arrayBuffer], { type: 'video/mp4' });
 		currentBlobUrl = URL.createObjectURL(blob);
 
-		videoEl.src = currentBlobUrl;
-		videoEl.load();
-		videoEl.play();
+		videEl.style.display = 'none';
+		imageEl.style.display = 'none';
 
-		const meta = await ipcRenderer.invoke('get-metadata', file.name);
-		metadataEl.textContent = JSON.stringify(meta, null, 2);
+		//choose appripriate viewer
+		if (mimeType.startsWith('video/') || mimeType.startsWith('audio/')) {
+			videoEl.src = currentBlobUrl;
+			videEl.style.display = 'block';
+			videoEl.load();
+			videoEl.play();
+
+		} else if (mimeType.startsWith('image/')) {
+			imageEl.src = currentBlobUrl;
+			imageEl.style.display = 'block';
+		}
+
+		try {
+			const meta = await ipcRenderer.invoke('get-metadata', file.name);
+			metadataEl.textContent = JSON.stringify(meta, null, 2);
+		} catch (metaErr) {
+			metadataEl.textContent = `No metadata available for ${file.name}`;
+		}
+		
 
 	} catch (err) {
 		metadataEl.textContent = `Error loading video: ${err.message}`;
