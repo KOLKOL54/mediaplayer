@@ -7,8 +7,50 @@ const progressBar = document.getElementById('progressBar');
 const batchStatusEl = document.getElementById('batchStatus');
 const galleryEl = document.getElementById('gallery');
 const inner = document.getElementById('gallery-inner');
-const videEl = document.getElementById('video');
 const imageEl = document.getElementById('image');
+const gallery = document.getElementById('gallery');
+const container = document.getElementById('container');
+const divider = document.getElementById('divider');
+
+let currentMediaEl = null;
+window.addEventListener('resize', () => {
+	if (currentMediaEl) fitMedia(currentMediaEl);
+});
+
+let isDragging = false;
+
+divider.addEventListener('mousedown', (e) => {
+  isDragging = true;
+  document.body.style.userSelect = 'none'; //prevent text selection when dragging
+});
+
+window.addEventListener('mouseup', () => {
+  isDragging = false;
+  document.body.style.userSelect = '';
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (!isDragging) return;
+
+  //Calculate new gallery width
+  const containerRect = container.getBoundingClientRect();
+  let newGalleryWidth = e.clientX - containerRect.left;
+
+  // Optional limits
+  const minWidth = 200;
+  const maxWidth = containerRect.width * 0.7; // 70% max
+  if (newGalleryWidth < minWidth) newGalleryWidth = minWidth;
+  if (newGalleryWidth > maxWidth) newGalleryWidth = maxWidth;
+
+  gallery.style.width = newGalleryWidth + 'px';
+});
+
+if (gallery) {
+	const resizeObserver = new ResizeObserver(() => {
+		if (currentMediaEl) fitMedia(currentMediaEl);
+	});
+	resizeObserver.observe(gallery);
+}
 
 let currentFiles = {};
 let currentBlobUrl = null;
@@ -26,10 +68,10 @@ ipcRenderer.on('file-loaded', (event, { fileName, fileIndex, totalFiles }) => {
 		card.id = `card-${fileName}`;
 		card.style.position = 'relative';
 
-		// create container for square crop
+		//create container for square crop
 		const imgContainer = document.createElement('div');
-		imgContainer.style.width = '90%';        // fill the card width
-		imgContainer.style.height = '80%';       // desired height
+		imgContainer.style.width = '90%'; //fill the card width
+		imgContainer.style.height = '80%'; //desired height
 		imgContainer.style.position = 'absolute';
 		imgContainer.style.top = '5%';
 		imgContainer.style.overflow = 'hidden';  // crop overflow
@@ -44,17 +86,17 @@ ipcRenderer.on('file-loaded', (event, { fileName, fileIndex, totalFiles }) => {
 		/*img.style.position = 'absolute';
 		img.style.top = '5%';
 		img.style.borderRadius = '8px';*/
-		img.style.objectFit = 'cover';           // crops to fit the square
+		img.style.objectFit = 'cover'; //crops to fit the square
 		img.style.objectPosition = 'center';
 
 		// fetch video thumbnail from main process
 		ipcRenderer.invoke('get-media-thumbnail', fileName)
 			.then((base64Thumbnail) => {
-				img.src = base64Thumbnail; // set thumbnail
+				img.src = base64Thumbnail; //set thumbnail
 		})
 		.catch((err) => {
 			console.error('Error generating thumbnail for', fileName, err);
-			img.src = 'app-icon.png'; // fallback to default icon
+			img.src = 'app-icon.png'; //default icon if nothing get-media-thumbnail no work
 		});
 
 		//show filename
@@ -105,10 +147,13 @@ selectBtn.addEventListener('click', async () => {
 
 async function playFile(file) {
 	try {
+		// Stop currently playing video
+        videoEl.pause();
+
 		const ext = file.name.split('.').pop().toLowerCase();
 		const arrayBuffer = await ipcRenderer.invoke('get-file-buffer', file.name);
 
-		if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl); // Revoke previous blob URL
+		if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl); //Revoke previous blob URL
 
 		let mimeType = 'application/octet-stream';
 		if (['mp4', 'mov', 'webm', 'avi', 'mkv'].includes(ext)) mimeType = 'video/mp4';
@@ -118,20 +163,31 @@ async function playFile(file) {
 		const blob = new Blob([arrayBuffer], { type: 'video/mp4' });
 		currentBlobUrl = URL.createObjectURL(blob);
 
-		videEl.style.display = 'none';
+		videoEl.style.display = 'none';
 		imageEl.style.display = 'none';
 
-		//choose appripriate viewer
+		let usedEl;
 		if (mimeType.startsWith('video/') || mimeType.startsWith('audio/')) {
+			usedEl = videoEl;
 			videoEl.src = currentBlobUrl;
-			videEl.style.display = 'block';
+			await new Promise((resolve) => {
+				videoEl.onloadedmetadata = resolve;
+			});
 			videoEl.load();
 			videoEl.play();
-
 		} else if (mimeType.startsWith('image/')) {
+			usedEl = imageEl;
 			imageEl.src = currentBlobUrl;
-			imageEl.style.display = 'block';
+			await new Promise((resolve) => {
+				imageEl.onload = resolve;
+			});
+		} else {
+			metadataEl.textContent = `Unsupported file type: ${ext}`;
+			return;
 		}
+		usedEl.style.display = 'block';
+		fitMedia(usedEl);
+		currentMediaEl = usedEl;		
 
 		try {
 			const meta = await ipcRenderer.invoke('get-metadata', file.name);
@@ -139,12 +195,42 @@ async function playFile(file) {
 		} catch (metaErr) {
 			metadataEl.textContent = `No metadata available for ${file.name}`;
 		}
-		
-
 	} catch (err) {
 		metadataEl.textContent = `Error loading video: ${err.message}`;
 	}		
 }
+
+function fitMedia(el) {
+	
+	const container = document.getElementById('video-holder');
+	const containerWidth = container.clientWidth;
+	const containerHeight = container.clientHeight;
+
+	//Media intrinsic dimensions
+	const mediaWidth = el.videoWidth || el.naturalWidth;
+	const mediaHeight = el.videoHeight || el.naturalHeight;
+
+	if (!mediaWidth || !mediaHeight) return; //wait until loaded
+
+	const containerRatio = containerWidth / containerHeight;
+	const mediaRatio = mediaWidth / mediaHeight;
+
+	let width, height;
+
+	if (mediaRatio > containerRatio) {
+		//Media is wider relative to container → limit width
+		width = containerWidth;
+		height = width / mediaRatio;
+	} else {
+		//Media is taller relative to container → limit height
+		height = containerHeight;
+		width = height * mediaRatio;
+	}
+
+	el.style.width = `${width}px`;
+	el.style.height = `${height}px`;
+}
+
 
 ipcRenderer.on('file-load-progress', (event, { fileName, progress }) => {
 	progressBar.value = Math.round(progress * 100); // 0–100%

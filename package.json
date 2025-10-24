@@ -8,7 +8,7 @@
 		"fluent-ffmpeg": "^2.1.3"
 	},
 	"name": "mediaplayer",
-	"version": "0.1.6",
+	"version": "0.1.7",
 	"description": "Caching media player",
 	"main": "main.js",
 	"scripts": {
